@@ -23,6 +23,27 @@ class JellyfinClient:
             response.raise_for_status()
             return response.json()
 
+    async def get_image(
+        self,
+        item_id: str,
+        image_type: str = "Primary",
+        tag: str | None = None,
+    ) -> tuple[bytes, str]:
+        params = {}
+        if tag:
+            params["tag"] = tag
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(
+                f"{self.base_url}/Items/{quote(item_id)}/Images/{quote(image_type)}",
+                headers=self.headers,
+                params=params,
+            )
+            response.raise_for_status()
+
+        content_type = response.headers.get("content-type", "image/jpeg")
+        return response.content, content_type
+
     async def system_info(self):
         return await self._get("/System/Info")
 
@@ -35,10 +56,15 @@ class JellyfinClient:
     async def sessions(self):
         return await self._get("/Sessions")
 
-    def image_url(self, item_id: str | None, image_tag: str | None = None) -> str | None:
+    def image_url(
+        self,
+        item_id: str | None,
+        image_tag: str | None = None,
+    ) -> str | None:
         if not item_id:
             return None
-        url = f"{self.base_url}/Items/{quote(item_id)}/Images/Primary"
+
+        url = f"/api/images/{quote(item_id)}"
         if image_tag:
             url += f"?tag={quote(image_tag)}"
         return url

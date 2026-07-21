@@ -2,8 +2,10 @@ import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
-from fastapi import FastAPI, HTTPException
+import httpx
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from sqlalchemy import func, select, text
 
 from .config import settings
@@ -60,7 +62,7 @@ async def lifespan(app: FastAPI):
         poller_task.cancel()
 
 
-app = FastAPI(title="JellyGulp API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="JellyGulp API", version="0.2.1", lifespan=lifespan)
 
 origins = ["*"] if settings.cors_origins == "*" else [
     x.strip() for x in settings.cors_origins.split(",") if x.strip()
@@ -97,6 +99,38 @@ async def health():
         "database_connected": database_connected,
         "jellyfin_connected": jellyfin_connected,
     }
+
+
+@app.get("/api/images/{item_id}")
+async def image_proxy(
+    item_id: str,
+    tag: str | None = Query(default=None),
+):
+    try:
+        content, content_type = await client.get_image(
+            item_id=item_id,
+            image_type="Primary",
+            tag=tag,
+        )
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code
+        if status_code == 404:
+            raise HTTPException(status_code=404, detail="Image not found") from exc
+        raise HTTPException(
+            status_code=502,
+            detail="Jellyfin image request failed",
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Jellyfin image request failed",
+        ) from exc
+
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @app.get("/api/dashboard")

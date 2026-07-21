@@ -83,7 +83,7 @@ function formatTime(seconds: number): string {
 
   return `${Math.max(minutes, 1)}m left`;
 }
-
+  
 function formatBitrate(value?: number): string | null {
   if (!value) {
     return null;
@@ -303,17 +303,18 @@ export default function App() {
           value={data?.activity.active_streams ?? "—"}
           detail="Live right now"
         />
-        <StatCard
+        <<StatCard
           icon={<Film size={22} />}
           label="Movies"
           value={data ? number.format(data.counts.movies) : "—"}
-          detail={`${data ? number.format(data.counts.episodes) : "—"} episodes`}
+          detail="Across movie libraries"
+/>
         />
         <StatCard
           icon={<Tv size={22} />}
           label="Series"
           value={data ? number.format(data.counts.series) : "—"}
-          detail="Across all libraries"
+          detail={`${data ? number.format(data.counts.episodes) : "—"} episodes`}
         />
         <StatCard
           icon={<CircleUserRound size={22} />}

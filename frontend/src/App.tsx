@@ -3,11 +3,17 @@ import {
   Activity,
   CircleUserRound,
   Clapperboard,
+  Clock3,
   Film,
+  Gauge,
   Library,
+  MonitorPlay,
+  Pause,
+  Play,
   Radio,
   Server,
   Tv,
+  Volume2,
 } from "lucide-react";
 
 type Session = {
@@ -20,9 +26,18 @@ type Session = {
   season_name?: string;
   episode_number?: number;
   progress_percent: number;
+  remaining_seconds: number;
   is_paused: boolean;
   play_method: string;
+  resolution?: string;
+  is_hdr: boolean;
+  video_range?: string;
   video_codec?: string;
+  audio_codec?: string;
+  audio_channels?: number | string;
+  container?: string;
+  bitrate?: number;
+  transcode_reasons: string[];
   image_url?: string;
 };
 
@@ -52,6 +67,40 @@ type Dashboard = {
 };
 
 const number = new Intl.NumberFormat();
+
+function formatTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return "—";
+  }
+
+  const rounded = Math.round(seconds);
+  const hours = Math.floor(rounded / 3600);
+  const minutes = Math.floor((rounded % 3600) / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m left`;
+  }
+
+  return `${Math.max(minutes, 1)}m left`;
+}
+
+function formatBitrate(value?: number): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const mbps = value / 1_000_000;
+
+  if (mbps >= 1) {
+    return `${mbps.toFixed(mbps >= 10 ? 0 : 1)} Mbps`;
+  }
+
+  return `${Math.round(value / 1000)} Kbps`;
+}
+
+function methodClass(method: string): string {
+  return method.toLowerCase().replaceAll(" ", "-");
+}
 
 function StatCard({
   icon,
@@ -83,6 +132,8 @@ function SessionCard({ session }: { session: Session }) {
       }`
     : session.title;
 
+  const bitrate = formatBitrate(session.bitrate);
+
   return (
     <article className="session-card">
       <div className="poster">
@@ -95,28 +146,81 @@ function SessionCard({ session }: { session: Session }) {
 
       <div className="session-content">
         <div className="session-heading">
-          <div>
+          <div className="session-title-block">
             <p className="session-title">{session.title}</p>
             <p className="muted">{subtitle}</p>
           </div>
-          <span className={`pill ${session.play_method.toLowerCase()}`}>
-            {session.play_method}
-          </span>
+
+          <div className="badge-row">
+            <span className={`pill ${methodClass(session.play_method)}`}>
+              {session.play_method}
+            </span>
+            {session.resolution && (
+              <span className="pill neutral">{session.resolution}</span>
+            )}
+            {session.is_hdr && (
+              <span className="pill hdr">{session.video_range || "HDR"}</span>
+            )}
+          </div>
         </div>
 
         <div className="progress-track">
           <div
             className="progress-bar"
-            style={{ width: `${Math.max(0, Math.min(session.progress_percent, 100))}%` }}
+            style={{
+              width: `${Math.max(0, Math.min(session.progress_percent, 100))}%`,
+            }}
           />
         </div>
 
-        <div className="session-meta">
-          <span>{session.user_name}</span>
-          <span>{session.device_name}</span>
-          <span>{session.client}</span>
-          <span>{session.is_paused ? "Paused" : `${session.progress_percent}%`}</span>
+        <div className="session-progress-row">
+          <span className="play-state">
+            {session.is_paused ? <Pause size={13} /> : <Play size={13} />}
+            {session.is_paused ? "Paused" : `${session.progress_percent}% watched`}
+          </span>
+
+          <span className="remaining">
+            <Clock3 size={13} />
+            {formatTime(session.remaining_seconds)}
+          </span>
         </div>
+
+        <div className="technical-grid">
+          <span>
+            <CircleUserRound size={14} />
+            {session.user_name}
+          </span>
+
+          <span>
+            <MonitorPlay size={14} />
+            {session.device_name} · {session.client}
+          </span>
+
+          {(session.video_codec || bitrate) && (
+            <span>
+              <Gauge size={14} />
+              {[session.video_codec?.toUpperCase(), bitrate]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+          )}
+
+          {session.audio_codec && (
+            <span>
+              <Volume2 size={14} />
+              {session.audio_codec.toUpperCase()}
+              {session.audio_channels
+                ? ` · ${session.audio_channels} ch`
+                : ""}
+            </span>
+          )}
+        </div>
+
+        {session.transcode_reasons.length > 0 && (
+          <p className="transcode-note">
+            Transcode reason: {session.transcode_reasons.join(", ")}
+          </p>
+        )}
       </div>
     </article>
   );
@@ -130,9 +234,11 @@ export default function App() {
   async function load() {
     try {
       const response = await fetch("/api/dashboard");
+
       if (!response.ok) {
         throw new Error(`Dashboard request returned ${response.status}`);
       }
+
       setData(await response.json());
       setError(null);
       setLastUpdated(new Date());
@@ -151,7 +257,9 @@ export default function App() {
     <main>
       <header className="topbar">
         <div className="brand">
-          <div className="logo-mark"><Activity size={23} /></div>
+          <div className="logo-mark">
+            <Activity size={23} />
+          </div>
           <div>
             <h1>JellyGulp</h1>
             <p>Media intelligence for Jellyfin</p>
@@ -174,6 +282,7 @@ export default function App() {
               : "Connecting to the JellyGulp backend."}
           </p>
         </div>
+
         <div className="updated">
           Updated {lastUpdated ? lastUpdated.toLocaleTimeString() : "—"}
         </div>
@@ -231,6 +340,7 @@ export default function App() {
             <p className="eyebrow">LIVE ACTIVITY</p>
             <h3>Currently watching</h3>
           </div>
+
           <span className="count-badge">{data?.sessions.length ?? 0}</span>
         </div>
 
@@ -249,9 +359,7 @@ export default function App() {
         </div>
       </section>
 
-      <footer>
-        JellyGulp v0.1 · Live dashboard foundation
-      </footer>
+      <footer>JellyGulp v0.2 · Enhanced live sessions</footer>
     </main>
   );
 }

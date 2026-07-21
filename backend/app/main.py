@@ -17,6 +17,38 @@ poller = SessionPoller()
 poller_task: asyncio.Task | None = None
 
 
+def human_resolution(width: int | None, height: int | None) -> str | None:
+    if height:
+        if height >= 2160:
+            return "4K"
+        if height >= 1440:
+            return "1440p"
+        if height >= 1080:
+            return "1080p"
+        if height >= 720:
+            return "720p"
+        return f"{height}p"
+
+    if width:
+        if width >= 3840:
+            return "4K"
+        if width >= 2560:
+            return "1440p"
+        if width >= 1920:
+            return "1080p"
+        if width >= 1280:
+            return "720p"
+
+    return None
+
+
+def first_stream(media_streams: list[dict], stream_type: str) -> dict:
+    return next(
+        (stream for stream in media_streams if stream.get("Type") == stream_type),
+        {},
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global poller_task
@@ -28,7 +60,7 @@ async def lifespan(app: FastAPI):
         poller_task.cancel()
 
 
-app = FastAPI(title="JellyGulp API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="JellyGulp API", version="0.2.0", lifespan=lifespan)
 
 origins = ["*"] if settings.cors_origins == "*" else [
     x.strip() for x in settings.cors_origins.split(",") if x.strip()
@@ -46,6 +78,7 @@ app.add_middleware(
 async def health():
     database_connected = False
     jellyfin_connected = False
+
     try:
         with SessionLocal() as db:
             db.execute(text("SELECT 1"))
@@ -76,9 +109,13 @@ async def dashboard():
             client.sessions(),
         )
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Jellyfin request failed: {exc}") from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"Jellyfin request failed: {exc}",
+        ) from exc
 
     active_sessions = []
+
     for session in sessions:
         item = session.get("NowPlayingItem")
         if not item:
@@ -86,9 +123,52 @@ async def dashboard():
 
         play_state = session.get("PlayState") or {}
         transcode = session.get("TranscodingInfo") or {}
+
+        media_sources = item.get("MediaSources") or []
+        media_source = media_sources[0] if media_sources else {}
+        media_streams = media_source.get("MediaStreams") or []
+
+        video_stream = first_stream(media_streams, "Video")
+        audio_stream = first_stream(media_streams, "Audio")
+
         runtime = ticks_to_seconds(item.get("RunTimeTicks"))
         position = ticks_to_seconds(play_state.get("PositionTicks"))
+        remaining = max(runtime - position, 0) if runtime else 0
+
         image_tags = item.get("ImageTags") or {}
+
+        play_method = play_state.get("PlayMethod")
+        if not play_method:
+            if transcode:
+                play_method = "Transcode"
+            elif media_source:
+                play_method = "Direct Play"
+            else:
+                play_method = "Unknown"
+
+        width = (
+            transcode.get("Width")
+            or video_stream.get("Width")
+            or media_source.get("Width")
+        )
+        height = (
+            transcode.get("Height")
+            or video_stream.get("Height")
+            or media_source.get("Height")
+        )
+
+        video_range = (
+            video_stream.get("VideoRangeType")
+            or video_stream.get("VideoRange")
+            or ""
+        )
+        is_hdr = str(video_range).upper() not in {"", "SDR", "UNKNOWN", "NONE"}
+
+        bitrate = (
+            transcode.get("Bitrate")
+            or media_source.get("Bitrate")
+            or video_stream.get("BitRate")
+        )
 
         active_sessions.append({
             "session_id": session.get("Id"),
@@ -103,22 +183,45 @@ async def dashboard():
             "item_type": item.get("Type"),
             "position_seconds": position,
             "runtime_seconds": runtime,
+            "remaining_seconds": remaining,
             "progress_percent": round((position / runtime * 100), 1) if runtime else 0,
             "is_paused": bool(play_state.get("IsPaused")),
-            "play_method": play_state.get("PlayMethod") or (
-                "Transcode" if transcode else "Unknown"
+            "play_method": play_method,
+            "resolution": human_resolution(width, height),
+            "width": width,
+            "height": height,
+            "is_hdr": is_hdr,
+            "video_range": video_range or None,
+            "video_codec": (
+                transcode.get("VideoCodec")
+                or video_stream.get("Codec")
             ),
-            "video_codec": transcode.get("VideoCodec"),
-            "audio_codec": transcode.get("AudioCodec"),
-            "bitrate": transcode.get("Bitrate"),
-            "image_url": client.image_url(item.get("Id"), image_tags.get("Primary")),
+            "audio_codec": (
+                transcode.get("AudioCodec")
+                or audio_stream.get("Codec")
+            ),
+            "audio_channels": (
+                audio_stream.get("Channels")
+                or audio_stream.get("ChannelLayout")
+            ),
+            "container": media_source.get("Container"),
+            "bitrate": bitrate,
+            "transcode_reasons": transcode.get("TranscodeReasons") or [],
+            "image_url": client.image_url(
+                item.get("Id"),
+                image_tags.get("Primary"),
+            ),
         })
 
     since = datetime.now(timezone.utc) - timedelta(days=30)
+
     with SessionLocal() as db:
         event_count = db.scalar(
-            select(func.count(PlaybackEvent.id)).where(PlaybackEvent.occurred_at >= since)
+            select(func.count(PlaybackEvent.id)).where(
+                PlaybackEvent.occurred_at >= since
+            )
         ) or 0
+
         starts_30d = db.scalar(
             select(func.count(PlaybackEvent.id)).where(
                 PlaybackEvent.occurred_at >= since,
@@ -142,7 +245,11 @@ async def dashboard():
         },
         "users": {
             "total": len(users),
-            "disabled": sum(1 for u in users if (u.get("Policy") or {}).get("IsDisabled")),
+            "disabled": sum(
+                1
+                for user in users
+                if (user.get("Policy") or {}).get("IsDisabled")
+            ),
         },
         "activity": {
             "active_streams": len(active_sessions),
@@ -156,6 +263,7 @@ async def dashboard():
 @app.get("/api/history/recent")
 async def recent_history(limit: int = 50):
     limit = max(1, min(limit, 200))
+
     with SessionLocal() as db:
         rows = db.scalars(
             select(PlaybackEvent)

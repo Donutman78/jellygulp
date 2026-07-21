@@ -1,3 +1,4 @@
+import asyncio
 from urllib.parse import quote
 
 import httpx
@@ -50,27 +51,61 @@ class JellyfinClient:
     async def item_counts(self):
         return await self._get("/Items/Counts")
 
-    async def count_items(self, item_type: str) -> int:
+    async def virtual_folders(self) -> list[dict]:
+        result = await self._get("/Library/VirtualFolders")
+        return result if isinstance(result, list) else []
+
+    async def count_items(
+        self,
+        item_type: str,
+        parent_id: str,
+    ) -> int:
         result = await self._get(
             "/Items",
             params={
+                "ParentId": parent_id,
                 "Recursive": "true",
                 "IncludeItemTypes": item_type,
                 "IsVirtualItem": "false",
                 "EnableTotalRecordCount": "true",
-                "Limit": 0,
+                "Limit": 1,
+                "Fields": "BasicSyncInfo",
             },
         )
         return int(result.get("TotalRecordCount", 0))
 
     async def media_counts(self) -> dict[str, int]:
-        import asyncio
+        folders = await self.virtual_folders()
 
-        movies, series, episodes = await asyncio.gather(
-            self.count_items("Movie"),
-            self.count_items("Series"),
-            self.count_items("Episode"),
-        )
+        movie_folders = [
+            folder
+            for folder in folders
+            if str(folder.get("CollectionType") or "").lower() == "movies"
+            and folder.get("ItemId")
+        ]
+        tv_folders = [
+            folder
+            for folder in folders
+            if str(folder.get("CollectionType") or "").lower() == "tvshows"
+            and folder.get("ItemId")
+        ]
+
+        movie_tasks = [
+            self.count_items("Movie", folder["ItemId"])
+            for folder in movie_folders
+        ]
+        series_tasks = [
+            self.count_items("Series", folder["ItemId"])
+            for folder in tv_folders
+        ]
+        episode_tasks = [
+            self.count_items("Episode", folder["ItemId"])
+            for folder in tv_folders
+        ]
+
+        movies = sum(await asyncio.gather(*movie_tasks)) if movie_tasks else 0
+        series = sum(await asyncio.gather(*series_tasks)) if series_tasks else 0
+        episodes = sum(await asyncio.gather(*episode_tasks)) if episode_tasks else 0
 
         return {
             "movies": movies,

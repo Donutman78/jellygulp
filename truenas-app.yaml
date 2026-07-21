@@ -1,0 +1,38 @@
+services:
+  database:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: jellygulp
+      POSTGRES_USER: jellygulp
+      POSTGRES_PASSWORD: REPLACE_WITH_A_LONG_RANDOM_PASSWORD
+    volumes:
+      - /mnt/REPLACE_POOL/jellygulp/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jellygulp -d jellygulp"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: ghcr.io/donutman78/jellygulp-backend:latest
+    restart: unless-stopped
+    environment:
+      JELLYFIN_URL: http://192.168.1.246:30013
+      JELLYFIN_API_KEY: REPLACE_WITH_YOUR_PRIVATE_API_KEY
+      DATABASE_URL: postgresql+psycopg://jellygulp:REPLACE_WITH_A_LONG_RANDOM_PASSWORD@database:5432/jellygulp
+      POLL_INTERVAL_SECONDS: "10"
+      CORS_ORIGINS: "*"
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "30021:8000"
+
+  frontend:
+    image: ghcr.io/donutman78/jellygulp-frontend:latest
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "30020:80"

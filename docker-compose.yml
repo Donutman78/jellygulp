@@ -1,0 +1,44 @@
+services:
+  database:
+    image: postgres:16-alpine
+    container_name: jellygulp-database
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-jellygulp}
+      POSTGRES_USER: ${POSTGRES_USER:-jellygulp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - jellygulp_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-jellygulp} -d ${POSTGRES_DB:-jellygulp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: jellygulp-backend
+    restart: unless-stopped
+    environment:
+      JELLYFIN_URL: ${JELLYFIN_URL}
+      JELLYFIN_API_KEY: ${JELLYFIN_API_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-10}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+      - "30021:8000"
+
+  frontend:
+    build: ./frontend
+    container_name: jellygulp-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "30020:80"
+
+volumes:
+  jellygulp_postgres:

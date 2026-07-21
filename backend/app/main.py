@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
         poller_task.cancel()
 
 
-app = FastAPI(title="JellyGulp API", version="0.2.1", lifespan=lifespan)
+app = FastAPI(title="JellyGulp API", version="0.2.2", lifespan=lifespan)
 
 origins = ["*"] if settings.cors_origins == "*" else [
     x.strip() for x in settings.cors_origins.split(",") if x.strip()
@@ -136,8 +136,9 @@ async def image_proxy(
 @app.get("/api/dashboard")
 async def dashboard():
     try:
-        system, counts, users, sessions = await asyncio.gather(
+        system, media_counts, generic_counts, users, sessions = await asyncio.gather(
             client.system_info(),
+            client.media_counts(),
             client.item_counts(),
             client.users(),
             client.sessions(),
@@ -271,11 +272,11 @@ async def dashboard():
             "operating_system": system.get("OperatingSystem"),
         },
         "counts": {
-            "movies": counts.get("MovieCount", 0),
-            "series": counts.get("SeriesCount", 0),
-            "episodes": counts.get("EpisodeCount", 0),
-            "songs": counts.get("SongCount", 0),
-            "albums": counts.get("AlbumCount", 0),
+            "movies": media_counts["movies"],
+            "series": media_counts["series"],
+            "episodes": media_counts["episodes"],
+            "songs": generic_counts.get("SongCount", 0),
+            "albums": generic_counts.get("AlbumCount", 0),
         },
         "users": {
             "total": len(users),

@@ -14,7 +14,7 @@ class JellyfinClient:
         }
 
     async def _get(self, path: str, params: dict | None = None):
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 f"{self.base_url}{path}",
                 headers=self.headers,
@@ -49,6 +49,34 @@ class JellyfinClient:
 
     async def item_counts(self):
         return await self._get("/Items/Counts")
+
+    async def count_items(self, item_type: str) -> int:
+        result = await self._get(
+            "/Items",
+            params={
+                "Recursive": "true",
+                "IncludeItemTypes": item_type,
+                "IsVirtualItem": "false",
+                "EnableTotalRecordCount": "true",
+                "Limit": 0,
+            },
+        )
+        return int(result.get("TotalRecordCount", 0))
+
+    async def media_counts(self) -> dict[str, int]:
+        import asyncio
+
+        movies, series, episodes = await asyncio.gather(
+            self.count_items("Movie"),
+            self.count_items("Series"),
+            self.count_items("Episode"),
+        )
+
+        return {
+            "movies": movies,
+            "series": series,
+            "episodes": episodes,
+        }
 
     async def users(self):
         return await self._get("/Users")

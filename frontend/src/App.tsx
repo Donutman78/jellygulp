@@ -99,7 +99,8 @@ function formatBitrate(value?: number): string | null {
 }
 
 function methodClass(method: string): string {
-  return method.toLowerCase().replaceAll(" ", "-");
+  return method.toLowerCase().replace(/\s+/g, "-");
+
 }
 
 function StatCard({

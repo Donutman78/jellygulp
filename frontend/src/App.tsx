@@ -309,12 +309,13 @@ export default function App() {
           value={data ? number.format(data.counts.movies) : "—"}
           detail="Across movie libraries"
 />
-        />
-        <StatCard
+
+<       StatCard
           icon={<Tv size={22} />}
           label="Series"
           value={data ? number.format(data.counts.series) : "—"}
           detail={`${data ? number.format(data.counts.episodes) : "—"} episodes`}
+/>
         />
         <StatCard
           icon={<CircleUserRound size={22} />}

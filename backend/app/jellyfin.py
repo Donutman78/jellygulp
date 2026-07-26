@@ -120,6 +120,45 @@ class JellyfinClient:
             "episodes": episodes,
         }
 
+    async def recently_added(self, limit: int = 20) -> list[dict]:
+        folders = await self.virtual_folders()
+        excluded = settings.excluded_library_names_set
+
+        content_folders = [
+            folder
+            for folder in folders
+            if str(folder.get("Name") or "").strip().lower() not in excluded
+            and str(folder.get("CollectionType") or "").lower() in {"movies", "tvshows"}
+            and folder.get("ItemId")
+        ]
+
+        async def fetch(parent_id: str) -> list[dict]:
+            result = await self._get(
+                "/Items",
+                params={
+                    "ParentId": parent_id,
+                    "SortBy": "DateCreated",
+                    "SortOrder": "Descending",
+                    "IncludeItemTypes": "Movie,Episode",
+                    "Recursive": "true",
+                    "IsVirtualItem": "false",
+                    "Limit": limit,
+                    "Fields": "DateCreated,SeriesName,SeriesId,SeriesPrimaryImageTag,"
+                    "ParentIndexNumber,IndexNumber,ImageTags",
+                },
+            )
+            return result.get("Items", [])
+
+        batches = (
+            await asyncio.gather(*(fetch(folder["ItemId"]) for folder in content_folders))
+            if content_folders
+            else []
+        )
+
+        items = [item for batch in batches for item in batch]
+        items.sort(key=lambda item: item.get("DateCreated") or "", reverse=True)
+        return items[:limit]
+
     async def users(self):
         return await self._get("/Users")
 

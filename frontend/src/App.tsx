@@ -89,6 +89,15 @@ type SportsScores = {
   guardians: TeamScore | null;
 };
 
+type RecentItem = {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  type: string;
+  date_created: string | null;
+  image_url: string | null;
+};
+
 type Analytics = {
   days: number;
   daily: { date: string; plays: number; transcodes: number; direct_plays: number }[];
@@ -392,6 +401,37 @@ function TeamCard({ label, game }: { label: string; game: TeamScore | null }) {
   );
 }
 
+function RecentlyAddedRow({ items }: { items: RecentItem[] }) {
+  return (
+    <div className="panel recent-panel">
+      <p className="eyebrow">Library</p>
+      <h3 style={{ margin: "2px 0 10px", fontSize: 14, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        Recently added
+      </h3>
+      {items.length === 0 ? (
+        <p className="empty-note">Nothing new indexed yet.</p>
+      ) : (
+        <div className="recent-strip">
+          {items.map((item) => (
+            <div className="recent-card" key={item.id}>
+              <div className="recent-poster">
+                {item.image_url ? (
+                  <img src={`${API_BASE}${item.image_url}`} alt="" />
+                ) : (
+                  <Clapperboard size={20} />
+                )}
+              </div>
+              <p className="recent-title">{item.title}</p>
+              {item.subtitle && <p className="recent-sub">{item.subtitle}</p>}
+              {item.date_created && <p className="recent-sub">{formatRelativeTime(item.date_created)}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Leaderboard({ items }: { items: { name: string; plays: number }[] }) {
   if (items.length === 0) {
     return <p className="empty-note">No plays recorded in this window yet.</p>;
@@ -528,6 +568,7 @@ export default function App() {
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [sports, setSports] = useState<SportsScores | null>(null);
+  const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
 
   async function load() {
     try {
@@ -605,6 +646,27 @@ export default function App() {
 
     loadSports();
     const timer = window.setInterval(loadSports, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRecent() {
+      try {
+        const res = await fetch(`${API_BASE}/api/recently-added?limit=16`);
+        if (res.ok && !cancelled) {
+          setRecentItems(await res.json());
+        }
+      } catch {
+        // leave last known items in place on transient failure
+      }
+    }
+
+    loadRecent();
+    const timer = window.setInterval(loadRecent, 60_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -789,6 +851,8 @@ export default function App() {
           </div>
         </div>
         )}
+
+        {view === "live" && <RecentlyAddedRow items={recentItems} />}
 
         <footer>
           JellyGulp · {data ? `${number.format(data.activity.play_starts_30d)} plays in 30d` : "Connecting…"}

@@ -296,6 +296,50 @@ async def dashboard():
     }
 
 
+@app.get("/api/recently-added")
+async def recently_added(limit: int = Query(default=16, ge=1, le=50)):
+    try:
+        items = await client.recently_added(limit=limit)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Jellyfin request failed: {exc}",
+        ) from exc
+
+    results = []
+    for item in items:
+        item_type = item.get("Type")
+        image_tags = item.get("ImageTags") or {}
+
+        if item_type == "Episode" and item.get("SeriesId"):
+            poster_id = item.get("SeriesId")
+            poster_tag = item.get("SeriesPrimaryImageTag")
+        else:
+            poster_id = item.get("Id")
+            poster_tag = image_tags.get("Primary")
+
+        subtitle = None
+        if item_type == "Episode":
+            season = item.get("ParentIndexNumber")
+            episode = item.get("IndexNumber")
+            series = item.get("SeriesName")
+            if season is not None and episode is not None:
+                subtitle = f"{series} · S{season}E{episode}" if series else f"S{season}E{episode}"
+            else:
+                subtitle = series
+
+        results.append({
+            "id": item.get("Id"),
+            "title": item.get("Name"),
+            "subtitle": subtitle,
+            "type": item_type,
+            "date_created": item.get("DateCreated"),
+            "image_url": client.image_url(poster_id, poster_tag),
+        })
+
+    return results
+
+
 @app.get("/api/sports/cleveland")
 async def sports_cleveland():
     return await cleveland_scores()

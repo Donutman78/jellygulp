@@ -97,8 +97,21 @@ class SessionPoller:
 
         self.active = current
 
+    async def prime(self) -> None:
+        try:
+            sessions = await self.client.sessions()
+        except Exception as exc:
+            print(f"Session poll priming failed: {exc}", flush=True)
+            return
+
+        for raw in sessions:
+            item = self.normalize(raw)
+            if item:
+                self.active[item["session_id"]] = item
+
     async def run(self) -> None:
         self.running = True
+        await self.prime()
         while self.running:
             try:
                 await self.poll_once()

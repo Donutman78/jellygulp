@@ -25,6 +25,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-10}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      EXCLUDED_LIBRARY_NAMES: ${EXCLUDED_LIBRARY_NAMES:-}
     depends_on:
       database:
         condition: service_healthy

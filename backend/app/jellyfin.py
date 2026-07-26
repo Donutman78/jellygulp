@@ -76,6 +76,13 @@ class JellyfinClient:
 
     async def media_counts(self) -> dict[str, int]:
         folders = await self.virtual_folders()
+        excluded = settings.excluded_library_names_set
+
+        folders = [
+            folder
+            for folder in folders
+            if str(folder.get("Name") or "").strip().lower() not in excluded
+        ]
 
         movie_folders = [
             folder

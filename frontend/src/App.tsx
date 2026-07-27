@@ -12,7 +12,18 @@ import {
   Tv,
   Volume2,
 } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 type Session = {
   session_id: string;
@@ -109,14 +120,22 @@ type RecentItem = {
 
 type Analytics = {
   days: number;
-  daily: { date: string; plays: number; transcodes: number; direct_plays: number }[];
-  top_titles: { title: string; plays: number }[];
-  top_users: { user_name: string; plays: number }[];
+  daily: { date: string; hours: number; transcode_hours: number; direct_hours: number }[];
+  top_titles: { title: string; hours: number; plays: number }[];
+  top_users: { user_name: string; hours: number; plays: number }[];
+  top_devices: { client: string; hours: number; plays: number }[];
+  heatmap: { day: number; hour: number; plays: number }[];
+  media_split: { type: string; hours: number }[];
+  yearly_top_users: { user_name: string; hours: number; plays: number }[];
   summary: {
     total_plays: number;
-    transcodes: number;
-    direct_plays: number;
+    total_hours: number;
+    transcode_hours: number;
+    direct_hours: number;
     unique_users: number;
+    finished: number;
+    abandoned: number;
+    completion_pct: number | null;
   };
 };
 
@@ -556,12 +575,17 @@ function RecentlyAddedRow({ items }: { items: RecentItem[] }) {
   );
 }
 
-function Leaderboard({ items }: { items: { name: string; plays: number }[] }) {
+function formatHours(hours: number): string {
+  if (hours < 1) return `${Math.round(hours * 60)}m`;
+  return `${hours.toFixed(1)}h`;
+}
+
+function Leaderboard({ items }: { items: { name: string; hours: number; plays: number }[] }) {
   if (items.length === 0) {
     return <p className="empty-note">No plays recorded in this window yet.</p>;
   }
 
-  const max = Math.max(...items.map((i) => i.plays), 1);
+  const max = Math.max(...items.map((i) => i.hours), 0.01);
 
   return (
     <div>
@@ -569,11 +593,14 @@ function Leaderboard({ items }: { items: { name: string; plays: number }[] }) {
         <div key={item.name + i}>
           <div className="leader-row">
             <span className="leader-rank">{i + 1}</span>
-            <span className="leader-name">{item.name}</span>
-            <span className="leader-count">{item.plays}</span>
+            <span className="leader-name">
+              {item.name}
+              <span className="leader-sub"> · {item.plays} play{item.plays === 1 ? "" : "s"}</span>
+            </span>
+            <span className="leader-count">{formatHours(item.hours)}</span>
           </div>
           <div className="leader-track">
-            <div className="leader-fill" style={{ width: `${(item.plays / max) * 100}%` }} />
+            <div className="leader-fill" style={{ width: `${(item.hours / max) * 100}%` }} />
           </div>
         </div>
       ))}
@@ -583,14 +610,114 @@ function Leaderboard({ items }: { items: { name: string; plays: number }[] }) {
 
 function ChartTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
-  const direct = payload.find((p: any) => p.dataKey === "direct_plays")?.value ?? 0;
-  const transcode = payload.find((p: any) => p.dataKey === "transcodes")?.value ?? 0;
+  const direct = payload.find((p: any) => p.dataKey === "direct_hours")?.value ?? 0;
+  const transcode = payload.find((p: any) => p.dataKey === "transcode_hours")?.value ?? 0;
 
   return (
     <div className="panel" style={{ padding: "8px 12px", fontSize: 11 }}>
       <p className="eyebrow" style={{ marginBottom: 4 }}>{label}</p>
-      <p style={{ margin: 0, color: "#4df3ff" }}>Direct: {direct}</p>
-      <p style={{ margin: 0, color: "#ffb454" }}>Transcode: {transcode}</p>
+      <p style={{ margin: 0, color: "#4df3ff" }}>Direct: {formatHours(direct)}</p>
+      <p style={{ margin: 0, color: "#ffb454" }}>Transcode: {formatHours(transcode)}</p>
+    </div>
+  );
+}
+
+const MEDIA_SPLIT_COLORS = ["#4df3ff", "#b98bff"];
+
+function MediaSplitChart({ data }: { data: { type: string; hours: number }[] }) {
+  const total = data.reduce((sum, d) => sum + d.hours, 0);
+
+  if (total <= 0) {
+    return <p className="empty-note">Not enough history yet.</p>;
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
+      <div style={{ width: 120, height: 120, flexShrink: 0 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              dataKey="hours"
+              nameKey="type"
+              innerRadius={38}
+              outerRadius={58}
+              paddingAngle={3}
+              stroke="none"
+            >
+              {data.map((_, i) => (
+                <Cell key={i} fill={MEDIA_SPLIT_COLORS[i % MEDIA_SPLIT_COLORS.length]} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+      <div style={{ flex: 1 }}>
+        {data.map((d, i) => (
+          <div key={d.type} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 13 }}>
+            <span
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: 2,
+                background: MEDIA_SPLIT_COLORS[i % MEDIA_SPLIT_COLORS.length],
+                flexShrink: 0,
+              }}
+            />
+            <span style={{ color: "var(--cyan-dim)" }}>{d.type}</span>
+            <span style={{ color: "var(--cyan)", fontWeight: "bold", marginLeft: "auto" }}>
+              {Math.round((d.hours / total) * 100)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const HEATMAP_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function Heatmap({ cells }: { cells: { day: number; hour: number; plays: number }[] }) {
+  if (cells.length === 0) {
+    return <p className="empty-note">Not enough history yet to show a pattern.</p>;
+  }
+
+  const max = Math.max(...cells.map((c) => c.plays), 1);
+  const lookup = new Map(cells.map((c) => [`${c.day}-${c.hour}`, c.plays]));
+
+  return (
+    <div className="heatmap">
+      {HEATMAP_DAYS.map((label, day) => (
+        <div className="heatmap-row" key={label}>
+          <span className="heatmap-day-label">{label}</span>
+          <div className="heatmap-cells">
+            {Array.from({ length: 24 }).map((_, hour) => {
+              const plays = lookup.get(`${day}-${hour}`) ?? 0;
+              const intensity = plays / max;
+              return (
+                <div
+                  key={hour}
+                  className="heatmap-cell"
+                  style={{ opacity: plays ? 0.18 + intensity * 0.82 : 0.06 }}
+                  title={`${label} ${hour}:00 — ${plays} play${plays === 1 ? "" : "s"}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <div className="heatmap-row heatmap-axis">
+        <span className="heatmap-day-label" />
+        <div className="heatmap-cells">
+          {["12a", "", "", "", "", "", "6a", "", "", "", "", "", "12p", "", "", "", "", "", "6p", "", "", "", "", ""].map(
+            (label, i) => (
+              <span className="heatmap-hour-label" key={i}>
+                {label}
+              </span>
+            ),
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -612,29 +739,39 @@ function AnalyticsView({ analytics, error }: { analytics: Analytics | null; erro
     );
   }
 
-  const { summary, daily, top_titles, top_users } = analytics;
-  const transcodePct = summary.total_plays
-    ? Math.round((summary.transcodes / summary.total_plays) * 100)
+  const { summary, daily, top_titles, top_users, top_devices, heatmap, media_split, yearly_top_users } = analytics;
+  const transcodePct = summary.total_hours
+    ? Math.round((summary.transcode_hours / summary.total_hours) * 100)
     : 0;
+
+  const sectionHeading = (eyebrow: string, title: string) => (
+    <>
+      <p className="eyebrow">{eyebrow}</p>
+      <h3 style={{ margin: "2px 0 10px", fontSize: 14, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        {title}
+      </h3>
+    </>
+  );
 
   return (
     <>
       <div className="stats">
-        <StatTile label={`Plays (${analytics.days}d)`} value={number.format(summary.total_plays)} />
+        <StatTile label={`Watch time (${analytics.days}d)`} value={formatHours(summary.total_hours)} />
         <StatTile
-          label="Transcode ratio"
+          label="Transcode share"
           value={`${transcodePct}%`}
-          sub={`${number.format(summary.transcodes)} of ${number.format(summary.total_plays)}`}
+          sub={`${formatHours(summary.transcode_hours)} of ${formatHours(summary.total_hours)}`}
         />
-        <StatTile label="Unique viewers" value={summary.unique_users} />
+        <StatTile
+          label="Completion rate"
+          value={summary.completion_pct !== null ? `${summary.completion_pct}%` : "—"}
+          sub={`${summary.finished} finished · ${summary.abandoned} abandoned`}
+        />
       </div>
 
       <div className="analytics-grid">
         <div className="panel">
-          <p className="eyebrow">Plays per day</p>
-          <h3 style={{ margin: "2px 0 0", fontSize: 14, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-            Direct play vs transcode
-          </h3>
+          {sectionHeading("Watch time per day", "Direct play vs transcode")}
           {daily.length === 0 ? (
             <p className="empty-note">No playback history recorded yet.</p>
           ) : (
@@ -649,10 +786,10 @@ function AnalyticsView({ analytics, error }: { analytics: Analytics | null; erro
                     fontSize={10}
                     tickLine={false}
                   />
-                  <YAxis stroke="#0f7a8c" fontSize={10} tickLine={false} allowDecimals={false} />
+                  <YAxis stroke="#0f7a8c" fontSize={10} tickLine={false} />
                   <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(77,243,255,0.06)" }} />
-                  <Bar dataKey="direct_plays" stackId="a" fill="#4df3ff" />
-                  <Bar dataKey="transcodes" stackId="a" fill="#ffb454" />
+                  <Bar dataKey="direct_hours" stackId="a" fill="#4df3ff" />
+                  <Bar dataKey="transcode_hours" stackId="a" fill="#ffb454" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -661,21 +798,39 @@ function AnalyticsView({ analytics, error }: { analytics: Analytics | null; erro
 
         <div className="leaderboards">
           <div className="panel">
-            <p className="eyebrow">Most watched</p>
-            <h3 style={{ margin: "2px 0 10px", fontSize: 14, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Top titles
-            </h3>
-            <Leaderboard items={top_titles.map((t) => ({ name: t.title, plays: t.plays }))} />
+            {sectionHeading("Most watched", "Top titles")}
+            <Leaderboard items={top_titles.map((t) => ({ name: t.title, hours: t.hours, plays: t.plays }))} />
           </div>
 
           <div className="panel">
-            <p className="eyebrow">Most active</p>
-            <h3 style={{ margin: "2px 0 10px", fontSize: 14, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Top viewers
-            </h3>
-            <Leaderboard items={top_users.map((u) => ({ name: u.user_name, plays: u.plays }))} />
+            {sectionHeading("Most active", "Top viewers")}
+            <Leaderboard items={top_users.map((u) => ({ name: u.user_name, hours: u.hours, plays: u.plays }))} />
           </div>
         </div>
+      </div>
+
+      <div className="analytics-grid" style={{ marginTop: 20 }}>
+        <div className="panel">
+          {sectionHeading("When the server gets used", "Viewing pattern")}
+          <Heatmap cells={heatmap} />
+        </div>
+
+        <div className="leaderboards">
+          <div className="panel">
+            {sectionHeading("Movies vs shows", "Watch time split")}
+            <MediaSplitChart data={media_split} />
+          </div>
+
+          <div className="panel">
+            {sectionHeading("Which apps get used", "Top devices")}
+            <Leaderboard items={top_devices.map((d) => ({ name: d.client, hours: d.hours, plays: d.plays }))} />
+          </div>
+        </div>
+      </div>
+
+      <div className="panel" style={{ marginTop: 20 }}>
+        {sectionHeading("Last 365 days", "Yearly watch time leaderboard")}
+        <Leaderboard items={yearly_top_users.map((u) => ({ name: u.user_name, hours: u.hours, plays: u.plays }))} />
       </div>
     </>
   );

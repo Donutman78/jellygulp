@@ -6,8 +6,9 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
-from sqlalchemy import case, func, select, text
+from sqlalchemy import func, select, text
 
+from .analytics import build_analytics
 from .config import settings
 from .database import Base, SessionLocal, engine
 from .jellyfin import JellyfinClient
@@ -377,75 +378,23 @@ async def sports_cleveland():
 @app.get("/api/analytics")
 async def analytics(days: int = Query(default=30, ge=1, le=90)):
     since = datetime.now(timezone.utc) - timedelta(days=days)
-    is_transcode = PlaybackEvent.play_method.ilike("%transcode%")
-    started = PlaybackEvent.event_type == "started"
-    in_range = PlaybackEvent.occurred_at >= since
+    year_since = datetime.now(timezone.utc) - timedelta(days=365)
 
     with SessionLocal() as db:
-        day_col = func.date(PlaybackEvent.occurred_at)
-        daily_rows = db.execute(
-            select(
-                day_col.label("day"),
-                func.count(PlaybackEvent.id).label("plays"),
-                func.sum(case((is_transcode, 1), else_=0)).label("transcodes"),
-            )
-            .where(started, in_range)
-            .group_by(day_col)
-            .order_by(day_col)
+        events = db.scalars(
+            select(PlaybackEvent)
+            .where(PlaybackEvent.occurred_at >= since)
+            .order_by(PlaybackEvent.occurred_at)
+        ).all()
+        year_events = db.scalars(
+            select(PlaybackEvent)
+            .where(PlaybackEvent.occurred_at >= year_since)
+            .order_by(PlaybackEvent.occurred_at)
         ).all()
 
-        title_expr = func.coalesce(PlaybackEvent.series_name, PlaybackEvent.item_name)
-        top_titles = db.execute(
-            select(title_expr.label("title"), func.count(PlaybackEvent.id).label("plays"))
-            .where(started, in_range, PlaybackEvent.item_name.is_not(None))
-            .group_by(title_expr)
-            .order_by(func.count(PlaybackEvent.id).desc())
-            .limit(8)
-        ).all()
-
-        top_users = db.execute(
-            select(
-                PlaybackEvent.user_name.label("user_name"),
-                func.count(PlaybackEvent.id).label("plays"),
-            )
-            .where(started, in_range, PlaybackEvent.user_name.is_not(None))
-            .group_by(PlaybackEvent.user_name)
-            .order_by(func.count(PlaybackEvent.id).desc())
-            .limit(8)
-        ).all()
-
-        total_plays = db.scalar(
-            select(func.count(PlaybackEvent.id)).where(started, in_range)
-        ) or 0
-        total_transcodes = db.scalar(
-            select(func.count(PlaybackEvent.id)).where(started, in_range, is_transcode)
-        ) or 0
-        unique_users = db.scalar(
-            select(func.count(func.distinct(PlaybackEvent.user_name))).where(
-                started, in_range
-            )
-        ) or 0
-
-    return {
-        "days": days,
-        "daily": [
-            {
-                "date": str(row.day),
-                "plays": row.plays,
-                "transcodes": row.transcodes or 0,
-                "direct_plays": row.plays - (row.transcodes or 0),
-            }
-            for row in daily_rows
-        ],
-        "top_titles": [{"title": row.title, "plays": row.plays} for row in top_titles],
-        "top_users": [{"user_name": row.user_name, "plays": row.plays} for row in top_users],
-        "summary": {
-            "total_plays": total_plays,
-            "transcodes": total_transcodes,
-            "direct_plays": total_plays - total_transcodes,
-            "unique_users": unique_users,
-        },
-    }
+    result = build_analytics(list(events), days)
+    result["yearly_top_users"] = build_analytics(list(year_events), 365)["top_users"]
+    return result
 
 
 @app.get("/api/history/recent")

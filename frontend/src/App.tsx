@@ -647,6 +647,15 @@ export default function App() {
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"live" | "analytics" | "requests">("live");
+  const [portal, setPortal] = useState<"left" | "right" | null>(null);
+
+  function openRequests(direction: "left" | "right") {
+    setPortal(direction);
+    window.setTimeout(() => {
+      setView("requests");
+      setPortal(null);
+    }, 520);
+  }
   const [wishlist, setWishlist] = useState<SeerrItem[]>([]);
   const [comingSoon, setComingSoon] = useState<SeerrItem[]>([]);
   const [requestsError, setRequestsError] = useState<string | null>(null);
@@ -815,6 +824,26 @@ export default function App() {
   return (
     <main>
       <div className="sweep" />
+
+      <button
+        type="button"
+        className="side-banner left"
+        onClick={() => openRequests("left")}
+        aria-label="Open wishlist"
+      >
+        <span>Wishlist</span>
+      </button>
+      <button
+        type="button"
+        className="side-banner right"
+        onClick={() => openRequests("right")}
+        aria-label="Open coming soon"
+      >
+        <span>Coming soon</span>
+      </button>
+
+      {portal && <div className={`portal-flash ${portal}`} />}
+
       <div className="content">
         <header className="topbar">
           <div className="brand">

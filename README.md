@@ -21,7 +21,7 @@ A self-hosted Jellyfin analytics and media-server dashboard.
 
 1. Copy `.env.example` to `.env`.
 2. Fill in `JELLYFIN_API_KEY`.
-3. Set `JELLYFIN_URL=http://192.168.1.246:30013`.
+3. Set `JELLYFIN_URL` to your Jellyfin server's address, e.g. `http://192.168.1.x:8096`.
 4. Run:
 
 ```bash

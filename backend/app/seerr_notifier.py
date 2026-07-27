@@ -5,9 +5,29 @@ from sqlalchemy import select
 
 from .config import settings
 from .database import SessionLocal
-from .models import NotifiedSeerrRequest
+from .models import NotifiedSeerrEvent
 from .ntfy import send_ntfy
 from .seerr import SeerrClient
+
+FILTER_BY_EVENT = {
+    "requested": "pending",
+    "approved": "processing",
+    "available": "available",
+}
+
+
+def build_message(event_type: str, item: dict) -> tuple[str, str]:
+    name = item.get("requested_by")
+
+    if event_type == "requested":
+        by = f" by {name}" if name else ""
+        return "New JellyGulp request", f"{item['title']} was requested{by}."
+
+    by = f" (requested by {name})" if name else ""
+    if event_type == "approved":
+        return "Request approved", f"{item['title']}{by} was approved and is queued to download."
+
+    return "Now available", f"{item['title']}{by} is now available to watch."
 
 
 class SeerrNotifier:
@@ -15,41 +35,53 @@ class SeerrNotifier:
         self.client = SeerrClient()
         self.running = False
 
-    async def check_once(self) -> None:
-        items = await self.client.wishlist()
-        if not items:
+    async def _notify_new(self, event_type: str) -> None:
+        raw_items = await self.client.raw_requests(FILTER_BY_EVENT[event_type], take=50)
+        ids = [item["id"] for item in raw_items if item.get("id") is not None]
+        if not ids:
             return
 
         with SessionLocal() as db:
             known_ids = set(
                 db.scalars(
-                    select(NotifiedSeerrRequest.request_id).where(
-                        NotifiedSeerrRequest.request_id.in_([item["id"] for item in items])
+                    select(NotifiedSeerrEvent.request_id).where(
+                        NotifiedSeerrEvent.event_type == event_type,
+                        NotifiedSeerrEvent.request_id.in_(ids),
                     )
                 ).all()
             )
 
-            for item in items:
-                if item["id"] in known_ids:
-                    continue
+            new_raw = [item for item in raw_items if item["id"] not in known_ids]
+            if not new_raw:
+                return
 
-                by = f" by {item['requested_by']}" if item.get("requested_by") else ""
-                await send_ntfy(
-                    f"{item['title']} was requested{by}.",
-                    title="New JellyGulp request",
-                )
+            enriched = await self.client.enrich(new_raw)
+
+            for item in enriched:
+                title_header, message = build_message(event_type, item)
+                await send_ntfy(message, title=title_header)
                 db.add(
-                    NotifiedSeerrRequest(
+                    NotifiedSeerrEvent(
                         request_id=item["id"],
+                        event_type=event_type,
                         notified_at=datetime.now(timezone.utc),
                     )
                 )
             db.commit()
 
+    async def check_once(self) -> None:
+        for event_type in ("requested", "approved", "available"):
+            await self._notify_new(event_type)
+
     async def run(self) -> None:
-        if not self.client.configured or not settings.ntfy_topic:
+        if not self.client.configured:
+            print("Seerr notifier disabled: SEERR_URL/SEERR_API_KEY not set", flush=True)
+            return
+        if not settings.ntfy_topic:
+            print("Seerr notifier disabled: NTFY_TOPIC not set", flush=True)
             return
 
+        print("Seerr notifier started, checking every 120s", flush=True)
         self.running = True
         while self.running:
             try:

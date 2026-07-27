@@ -807,8 +807,8 @@ footer {
   position: fixed;
   top: 0;
   bottom: 0;
-  width: 190px;
-  padding: 18px 14px;
+  width: clamp(200px, calc((100vw - 1200px) / 2 - 20px), 380px);
+  padding: 22px 18px;
   background: linear-gradient(180deg, rgba(7, 24, 32, 0.55), rgba(7, 24, 32, 0.92));
   border: none;
   cursor: pointer;
@@ -836,13 +836,13 @@ footer {
 
 .side-banner-label {
   display: block;
-  font-size: 11px;
+  font-size: 14px;
   font-weight: bold;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--cyan);
   text-shadow: 0 0 8px currentColor;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
   flex-shrink: 0;
 }
 
@@ -856,7 +856,7 @@ footer {
 .side-banner-track {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
   animation: sideScroll linear infinite;
 }
 
@@ -872,13 +872,13 @@ footer {
 .side-banner-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
 }
 
 .side-banner-poster {
-  width: 40px;
-  height: 60px;
-  flex: 0 0 40px;
+  width: 68px;
+  height: 102px;
+  flex: 0 0 68px;
   background: linear-gradient(160deg, #0a2029, #0e2b36);
   border: 1px solid var(--line);
   display: flex;
@@ -895,18 +895,18 @@ footer {
 }
 
 .side-banner-title {
-  font-size: 11px;
+  font-size: 14px;
   color: var(--cyan-dim);
-  line-height: 1.3;
+  line-height: 1.35;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
 .side-banner-empty {
   margin: 0;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--cyan-dim);
 }
 

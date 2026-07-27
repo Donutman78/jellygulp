@@ -81,6 +81,12 @@ class SeerrClient:
 
         return enriched
 
+    async def raw_requests(self, filter_name: str, take: int = 50) -> list[dict]:
+        return await self._requests(filter_name, take)
+
+    async def enrich(self, requests: list[dict]) -> list[dict]:
+        return await self._enrich(requests)
+
     async def wishlist(self) -> list[dict]:
         requests = await self._requests("pending")
         return await self._enrich(requests)

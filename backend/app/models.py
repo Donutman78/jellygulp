@@ -29,8 +29,13 @@ class PlaybackEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
-class NotifiedSeerrRequest(Base):
-    __tablename__ = "notified_seerr_requests"
+class NotifiedSeerrEvent(Base):
+    __tablename__ = "notified_seerr_events"
+    __table_args__ = (
+        UniqueConstraint("request_id", "event_type", name="uq_notified_seerr_event"),
+    )
 
-    request_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    request_id: Mapped[int] = mapped_column(Integer, index=True)
+    event_type: Mapped[str] = mapped_column(String(20))
     notified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

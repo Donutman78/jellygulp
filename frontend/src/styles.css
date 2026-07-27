@@ -803,24 +803,20 @@ footer {
 
 .side-banner {
   display: none;
+  flex-direction: column;
   position: fixed;
   top: 0;
   bottom: 0;
-  width: 56px;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(180deg, rgba(7, 24, 32, 0.4), rgba(7, 24, 32, 0.85));
+  width: 190px;
+  padding: 18px 14px;
+  background: linear-gradient(180deg, rgba(7, 24, 32, 0.55), rgba(7, 24, 32, 0.92));
   border: none;
   cursor: pointer;
   z-index: 5;
   color: var(--cyan-dim);
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  font-size: 12px;
   font-family: inherit;
-  transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  text-align: left;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .side-banner.left {
@@ -834,10 +830,84 @@ footer {
 }
 
 .side-banner:hover {
+  background: linear-gradient(180deg, rgba(77, 243, 255, 0.06), rgba(7, 24, 32, 0.95));
+  box-shadow: inset 0 0 30px rgba(77, 243, 255, 0.12);
+}
+
+.side-banner-label {
+  display: block;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--cyan);
-  text-shadow: 0 0 8px var(--cyan);
-  background: linear-gradient(180deg, rgba(77, 243, 255, 0.05), rgba(7, 24, 32, 0.9));
-  box-shadow: inset 0 0 24px rgba(77, 243, 255, 0.15);
+  text-shadow: 0 0 8px currentColor;
+  margin-bottom: 14px;
+  flex-shrink: 0;
+}
+
+.side-banner-scroll {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  mask-image: linear-gradient(180deg, transparent, black 8%, black 92%, transparent);
+}
+
+.side-banner-track {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: sideScroll linear infinite;
+}
+
+@keyframes sideScroll {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-50%);
+  }
+}
+
+.side-banner-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.side-banner-poster {
+  width: 40px;
+  height: 60px;
+  flex: 0 0 40px;
+  background: linear-gradient(160deg, #0a2029, #0e2b36);
+  border: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cyan-dim);
+  overflow: hidden;
+}
+
+.side-banner-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.side-banner-title {
+  font-size: 11px;
+  color: var(--cyan-dim);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.side-banner-empty {
+  margin: 0;
+  font-size: 11px;
+  color: var(--cyan-dim);
 }
 
 @keyframes portalLeft {
@@ -889,7 +959,7 @@ footer {
   animation: portalRight 0.5s ease-out forwards;
 }
 
-@media (min-width: 1500px) {
+@media (min-width: 1680px) {
   .side-banner {
     display: flex;
   }

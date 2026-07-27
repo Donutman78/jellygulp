@@ -410,6 +410,48 @@ function TeamCard({ label, game }: { label: string; game: TeamScore | null }) {
   );
 }
 
+function SideBanner({
+  label,
+  items,
+  direction,
+  onOpen,
+}: {
+  label: string;
+  items: SeerrItem[];
+  direction: "left" | "right";
+  onOpen: () => void;
+}) {
+  const loop = items.length > 0 ? [...items, ...items] : [];
+  const duration = Math.max(20, items.length * 7);
+
+  return (
+    <button
+      type="button"
+      className={`side-banner ${direction}`}
+      onClick={onOpen}
+      aria-label={`Open ${label.toLowerCase()}`}
+    >
+      <span className="side-banner-label">{label}</span>
+      <div className="side-banner-scroll">
+        {items.length === 0 ? (
+          <p className="side-banner-empty">Nothing here yet</p>
+        ) : (
+          <div className="side-banner-track" style={{ animationDuration: `${duration}s` }}>
+            {loop.map((item, i) => (
+              <div className="side-banner-item" key={`${item.id}-${i}`}>
+                <div className="side-banner-poster">
+                  {item.poster_url ? <img src={item.poster_url} alt="" /> : <Clapperboard size={16} />}
+                </div>
+                <span className="side-banner-title">{item.title}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </button>
+  );
+}
+
 function RequestCard({ item }: { item: SeerrItem }) {
   return (
     <div className="recent-card">
@@ -768,8 +810,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (view !== "requests") return;
-
     let cancelled = false;
     async function loadRequests() {
       try {
@@ -798,7 +838,7 @@ export default function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [view]);
+  }, []);
 
   const sessions = data?.sessions ?? [];
 
@@ -825,22 +865,8 @@ export default function App() {
     <main>
       <div className="sweep" />
 
-      <button
-        type="button"
-        className="side-banner left"
-        onClick={() => openRequests("left")}
-        aria-label="Open wishlist"
-      >
-        <span>Wishlist</span>
-      </button>
-      <button
-        type="button"
-        className="side-banner right"
-        onClick={() => openRequests("right")}
-        aria-label="Open coming soon"
-      >
-        <span>Coming soon</span>
-      </button>
+      <SideBanner label="Wishlist" items={wishlist} direction="left" onOpen={() => openRequests("left")} />
+      <SideBanner label="Coming soon" items={comingSoon} direction="right" onOpen={() => openRequests("right")} />
 
       {portal && <div className={`portal-flash ${portal}`} />}
 

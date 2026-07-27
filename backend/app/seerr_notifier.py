@@ -57,9 +57,17 @@ class SeerrNotifier:
 
             enriched = await self.client.enrich(new_raw)
 
-            for item in enriched:
+            for i, item in enumerate(enriched):
+                if i > 0:
+                    await asyncio.sleep(1.5)
+
                 title_header, message = build_message(event_type, item)
-                await send_ntfy(message, title=title_header)
+                sent = await send_ntfy(message, title=title_header)
+                if not sent:
+                    # Leave unrecorded so a transient failure (e.g. rate limiting)
+                    # gets retried on the next poll instead of being lost forever.
+                    continue
+
                 db.add(
                     NotifiedSeerrEvent(
                         request_id=item["id"],

@@ -640,6 +640,29 @@ main {
   margin-top: 18px;
 }
 
+.request-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 14px;
+}
+
+.request-grid .recent-card {
+  width: 100%;
+}
+
+.request-grid .recent-poster {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 3;
+}
+
+@media (max-width: 700px) {
+  .request-grid {
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 10px;
+  }
+}
+
 .recent-strip {
   display: flex;
   gap: 12px;

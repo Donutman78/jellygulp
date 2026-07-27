@@ -13,11 +13,16 @@ from .database import Base, SessionLocal, engine
 from .jellyfin import JellyfinClient
 from .models import PlaybackEvent
 from .poller import SessionPoller, ticks_to_seconds
+from .seerr import SeerrClient
+from .seerr_notifier import SeerrNotifier
 from .sports import cleveland_scores
 
 client = JellyfinClient()
 poller = SessionPoller()
 poller_task: asyncio.Task | None = None
+seerr_client = SeerrClient()
+seerr_notifier = SeerrNotifier()
+seerr_notifier_task: asyncio.Task | None = None
 
 
 def human_resolution(width: int | None, height: int | None) -> str | None:
@@ -54,13 +59,17 @@ def first_stream(media_streams: list[dict], stream_type: str) -> dict:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global poller_task
+    global poller_task, seerr_notifier_task
     Base.metadata.create_all(bind=engine)
     poller_task = asyncio.create_task(poller.run())
+    seerr_notifier_task = asyncio.create_task(seerr_notifier.run())
     yield
     poller.stop()
+    seerr_notifier.stop()
     if poller_task:
         poller_task.cancel()
+    if seerr_notifier_task:
+        seerr_notifier_task.cancel()
 
 
 app = FastAPI(title="JellyGulp API", version="0.2.2", lifespan=lifespan)
@@ -338,6 +347,26 @@ async def recently_added(limit: int = Query(default=16, ge=1, le=50)):
         })
 
     return results
+
+
+@app.get("/api/seerr/wishlist")
+async def seerr_wishlist():
+    if not seerr_client.configured:
+        return []
+    try:
+        return await seerr_client.wishlist()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Seerr request failed: {exc}") from exc
+
+
+@app.get("/api/seerr/coming-soon")
+async def seerr_coming_soon():
+    if not seerr_client.configured:
+        return []
+    try:
+        return await seerr_client.coming_soon()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Seerr request failed: {exc}") from exc
 
 
 @app.get("/api/sports/cleveland")

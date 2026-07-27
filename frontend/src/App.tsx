@@ -89,6 +89,15 @@ type SportsScores = {
   guardians: TeamScore | null;
 };
 
+type SeerrItem = {
+  id: number;
+  type: string;
+  title: string;
+  poster_url: string | null;
+  requested_by: string | null;
+  requested_at: string | null;
+};
+
 type RecentItem = {
   id: string;
   title: string;
@@ -401,6 +410,79 @@ function TeamCard({ label, game }: { label: string; game: TeamScore | null }) {
   );
 }
 
+function RequestCard({ item }: { item: SeerrItem }) {
+  return (
+    <div className="recent-card">
+      <div className="recent-poster">
+        {item.poster_url ? <img src={item.poster_url} alt="" /> : <Clapperboard size={20} />}
+      </div>
+      <p className="recent-title">{item.title}</p>
+      {item.requested_by && <p className="recent-sub">by {item.requested_by}</p>}
+      {item.requested_at && <p className="recent-sub">{formatRelativeTime(item.requested_at)}</p>}
+    </div>
+  );
+}
+
+function RequestsView({
+  wishlist,
+  comingSoon,
+  error,
+}: {
+  wishlist: SeerrItem[];
+  comingSoon: SeerrItem[];
+  error: string | null;
+}) {
+  if (error) {
+    return (
+      <div className="panel">
+        <p className="empty-note">Requests unavailable: {error}. Redeploy the backend to enable this view.</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="panel" style={{ marginBottom: 18 }}>
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Awaiting approval</p>
+            <h3>Wishlist</h3>
+          </div>
+          <span className="count-badge">{wishlist.length}</span>
+        </div>
+        {wishlist.length === 0 ? (
+          <p className="empty-note">Nothing pending right now.</p>
+        ) : (
+          <div className="request-grid">
+            {wishlist.map((item) => (
+              <RequestCard key={item.id} item={item} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Approved, awaiting storage</p>
+            <h3>Coming soon</h3>
+          </div>
+          <span className="count-badge">{comingSoon.length}</span>
+        </div>
+        {comingSoon.length === 0 ? (
+          <p className="empty-note">Nothing queued right now.</p>
+        ) : (
+          <div className="request-grid">
+            {comingSoon.map((item) => (
+              <RequestCard key={item.id} item={item} />
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function RecentlyAddedRow({ items }: { items: RecentItem[] }) {
   return (
     <div className="panel recent-panel">
@@ -564,7 +646,10 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"live" | "analytics">("live");
+  const [view, setView] = useState<"live" | "analytics" | "requests">("live");
+  const [wishlist, setWishlist] = useState<SeerrItem[]>([]);
+  const [comingSoon, setComingSoon] = useState<SeerrItem[]>([]);
+  const [requestsError, setRequestsError] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [sports, setSports] = useState<SportsScores | null>(null);
@@ -673,6 +758,39 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (view !== "requests") return;
+
+    let cancelled = false;
+    async function loadRequests() {
+      try {
+        const [wishRes, soonRes] = await Promise.all([
+          fetch(`${API_BASE}/api/seerr/wishlist`),
+          fetch(`${API_BASE}/api/seerr/coming-soon`),
+        ]);
+        if (cancelled) return;
+        if (wishRes.ok && soonRes.ok) {
+          setWishlist(await wishRes.json());
+          setComingSoon(await soonRes.json());
+          setRequestsError(null);
+        } else {
+          setRequestsError(`Request returned ${wishRes.status}/${soonRes.status}`);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setRequestsError(err instanceof Error ? err.message : "Unknown error");
+        }
+      }
+    }
+
+    loadRequests();
+    const timer = window.setInterval(loadRequests, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [view]);
+
   const sessions = data?.sessions ?? [];
 
   const transcodeCount = useMemo(
@@ -724,6 +842,13 @@ export default function App() {
             >
               Analytics
             </button>
+            <button
+              type="button"
+              className={`tab-btn${view === "requests" ? " active" : ""}`}
+              onClick={() => setView("requests")}
+            >
+              Requests
+            </button>
           </div>
 
           <div className="status">
@@ -767,6 +892,8 @@ export default function App() {
 
         {view === "analytics" ? (
           <AnalyticsView analytics={analytics} error={analyticsError} />
+        ) : view === "requests" ? (
+          <RequestsView wishlist={wishlist} comingSoon={comingSoon} error={requestsError} />
         ) : (
         <div className="grid">
           <div className="panel gauge-wrap">

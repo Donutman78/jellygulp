@@ -26,6 +26,10 @@ services:
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-10}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       EXCLUDED_LIBRARY_NAMES: ${EXCLUDED_LIBRARY_NAMES:-}
+      SEERR_URL: ${SEERR_URL:-}
+      SEERR_API_KEY: ${SEERR_API_KEY:-}
+      NTFY_URL: ${NTFY_URL:-https://ntfy.sh}
+      NTFY_TOPIC: ${NTFY_TOPIC:-}
     depends_on:
       database:
         condition: service_healthy

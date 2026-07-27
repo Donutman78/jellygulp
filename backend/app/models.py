@@ -27,3 +27,10 @@ class PlaybackEvent(Base):
     runtime_seconds: Mapped[float] = mapped_column(Float, default=0)
     event_type: Mapped[str] = mapped_column(String(50), index=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class NotifiedSeerrRequest(Base):
+    __tablename__ = "notified_seerr_requests"
+
+    request_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    notified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

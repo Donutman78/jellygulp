@@ -24,6 +24,10 @@ services:
       POLL_INTERVAL_SECONDS: "10"
       CORS_ORIGINS: "*"
       EXCLUDED_LIBRARY_NAMES: "Prerolls"
+      SEERR_URL: http://REPLACE_WITH_YOUR_SEERR_LAN_IP:PORT
+      SEERR_API_KEY: REPLACE_WITH_YOUR_SEERR_API_KEY
+      NTFY_URL: https://ntfy.sh
+      NTFY_TOPIC: REPLACE_WITH_YOUR_NTFY_TOPIC
     depends_on:
       database:
         condition: service_healthy

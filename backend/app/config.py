@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     poll_interval_seconds: int = 10
     cors_origins: str = "*"
     excluded_library_names: str = ""
+    seerr_url: str = ""
+    seerr_api_key: str = ""
+    ntfy_url: str = "https://ntfy.sh"
+    ntfy_topic: str = ""
 
     model_config = SettingsConfigDict(case_sensitive=False)
 

@@ -14,6 +14,7 @@ from .database import Base, SessionLocal, engine
 from .jellyfin import JellyfinClient
 from .models import PlaybackEvent
 from .poller import SessionPoller, ticks_to_seconds
+from .schemas import SeerrRequestPayload
 from .seerr import SeerrClient
 from .seerr_notifier import SeerrNotifier
 from .sports import cleveland_scores
@@ -374,6 +375,37 @@ async def recently_added(limit: int = Query(default=16, ge=1, le=50)):
         })
 
     return results
+
+
+@app.get("/api/seerr/search")
+async def seerr_search(query: str = Query(..., min_length=1)):
+    if not seerr_client.configured:
+        return []
+    try:
+        return await seerr_client.search(query)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Seerr search failed: {exc}") from exc
+
+
+@app.post("/api/seerr/request")
+async def seerr_create_request(payload: SeerrRequestPayload):
+    if not seerr_client.configured:
+        raise HTTPException(status_code=503, detail="Seerr not configured")
+
+    try:
+        if payload.media_type == "movie":
+            await seerr_client.request_movie(payload.tmdb_id)
+        else:
+            await seerr_client.request_tv(payload.tmdb_id)
+    except httpx.HTTPStatusError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Seerr request failed: {exc.response.text[:200]}",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Seerr request failed: {exc}") from exc
+
+    return {"ok": True}
 
 
 @app.get("/api/seerr/wishlist")

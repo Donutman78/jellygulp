@@ -571,6 +571,27 @@ main {
   color: var(--violet);
 }
 
+.search-input {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--cyan);
+  background: rgba(77, 243, 255, 0.05);
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.search-input::placeholder {
+  color: var(--cyan-dim);
+}
+
+.search-input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px var(--cyan) inset;
+}
+
 .icon-btn {
   display: inline-flex;
   align-items: center;

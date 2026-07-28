@@ -129,6 +129,16 @@ type RecentItem = {
   image_url: string | null;
 };
 
+type SearchResult = {
+  tmdb_id: number;
+  media_type: "movie" | "tv";
+  title: string;
+  year: string | null;
+  poster_url: string | null;
+  overview: string | null;
+  already_added: boolean;
+};
+
 type Analytics = {
   days: number;
   daily: { date: string; hours: number; transcode_hours: number; direct_hours: number }[];
@@ -629,14 +639,158 @@ function StorageView({ storage, error }: { storage: StorageBreakdown | null; err
   );
 }
 
+type RequestStatus = "idle" | "requesting" | "requested" | "error";
+
+function SearchResultCard({
+  result,
+  status,
+  onRequest,
+}: {
+  result: SearchResult;
+  status: RequestStatus;
+  onRequest: () => void;
+}) {
+  return (
+    <div className="recent-card">
+      <div className="recent-poster">
+        {result.poster_url ? <img src={result.poster_url} alt="" /> : <Clapperboard size={20} />}
+      </div>
+      <p className="recent-title">{result.title}</p>
+      <p className="recent-sub">
+        {result.year ?? "—"} · {result.media_type === "movie" ? "Movie" : "TV"}
+      </p>
+      {result.already_added ? (
+        <span className="pill" style={{ marginTop: 6 }}>
+          In Seerr
+        </span>
+      ) : status === "requested" ? (
+        <span className="pill violet" style={{ marginTop: 6 }}>
+          Requested
+        </span>
+      ) : (
+        <button
+          type="button"
+          className={`icon-btn${status === "error" ? " danger" : ""}`}
+          style={{ marginTop: 6 }}
+          disabled={status === "requesting"}
+          onClick={onRequest}
+        >
+          {status === "requesting" ? "Requesting…" : status === "error" ? "Retry" : "Request"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SearchAndRequest({ onRequested }: { onRequested: () => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [searchErr, setSearchErr] = useState<string | null>(null);
+  const [statusMap, setStatusMap] = useState<Record<string, RequestStatus>>({});
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      setResults([]);
+      setLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/seerr/search?query=${encodeURIComponent(trimmed)}`);
+        if (cancelled) return;
+        if (res.ok) {
+          setResults(await res.json());
+          setSearchErr(null);
+        } else {
+          setSearchErr(`Search returned ${res.status}`);
+        }
+      } catch (err) {
+        if (!cancelled) setSearchErr(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [query]);
+
+  async function handleRequest(result: SearchResult) {
+    const key = `${result.media_type}-${result.tmdb_id}`;
+    setStatusMap((m) => ({ ...m, [key]: "requesting" }));
+    try {
+      const res = await fetch(`${API_BASE}/api/seerr/request`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ media_type: result.media_type, tmdb_id: result.tmdb_id }),
+      });
+      if (res.ok) {
+        setStatusMap((m) => ({ ...m, [key]: "requested" }));
+        onRequested();
+      } else {
+        setStatusMap((m) => ({ ...m, [key]: "error" }));
+      }
+    } catch {
+      setStatusMap((m) => ({ ...m, [key]: "error" }));
+    }
+  }
+
+  return (
+    <div className="panel" style={{ marginBottom: 18 }}>
+      <p className="eyebrow">Search Seerr</p>
+      <h3 style={{ margin: "2px 0 10px", fontSize: 14, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        Find something to request
+      </h3>
+      <input
+        type="text"
+        className="search-input"
+        placeholder="Search movies and shows…"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+
+      {searchErr && <p className="empty-note" style={{ marginTop: 8 }}>Search failed: {searchErr}</p>}
+      {loading && <p className="empty-note" style={{ marginTop: 8 }}>Searching…</p>}
+      {!loading && query.trim().length >= 2 && results.length === 0 && !searchErr && (
+        <p className="empty-note" style={{ marginTop: 8 }}>No matches found.</p>
+      )}
+
+      {results.length > 0 && (
+        <div className="request-grid" style={{ marginTop: 12 }}>
+          {results.slice(0, 12).map((r) => {
+            const key = `${r.media_type}-${r.tmdb_id}`;
+            return (
+              <SearchResultCard
+                key={key}
+                result={r}
+                status={statusMap[key] ?? "idle"}
+                onRequest={() => handleRequest(r)}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RequestsView({
   wishlist,
   comingSoon,
   error,
+  onRequested,
 }: {
   wishlist: SeerrItem[];
   comingSoon: SeerrItem[];
   error: string | null;
+  onRequested: () => void;
 }) {
   if (error) {
     return (
@@ -648,6 +802,8 @@ function RequestsView({
 
   return (
     <>
+      <SearchAndRequest onRequested={onRequested} />
+
       <div className="panel" style={{ marginBottom: 18 }}>
         <div className="panel-heading">
           <div>
@@ -1158,33 +1314,28 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadRequests() {
-      try {
-        const [wishRes, soonRes] = await Promise.all([
-          fetch(`${API_BASE}/api/seerr/wishlist`),
-          fetch(`${API_BASE}/api/seerr/coming-soon`),
-        ]);
-        if (cancelled) return;
-        if (wishRes.ok && soonRes.ok) {
-          setWishlist(await wishRes.json());
-          setComingSoon(await soonRes.json());
-          setRequestsError(null);
-        } else {
-          setRequestsError(`Request returned ${wishRes.status}/${soonRes.status}`);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setRequestsError(err instanceof Error ? err.message : "Unknown error");
-        }
+  async function loadRequests() {
+    try {
+      const [wishRes, soonRes] = await Promise.all([
+        fetch(`${API_BASE}/api/seerr/wishlist`),
+        fetch(`${API_BASE}/api/seerr/coming-soon`),
+      ]);
+      if (wishRes.ok && soonRes.ok) {
+        setWishlist(await wishRes.json());
+        setComingSoon(await soonRes.json());
+        setRequestsError(null);
+      } else {
+        setRequestsError(`Request returned ${wishRes.status}/${soonRes.status}`);
       }
+    } catch (err) {
+      setRequestsError(err instanceof Error ? err.message : "Unknown error");
     }
+  }
 
+  useEffect(() => {
     loadRequests();
     const timer = window.setInterval(loadRequests, 60_000);
     return () => {
-      cancelled = true;
       window.clearInterval(timer);
     };
   }, []);
@@ -1304,7 +1455,12 @@ export default function App() {
         {view === "analytics" ? (
           <AnalyticsView analytics={analytics} error={analyticsError} />
         ) : view === "requests" ? (
-          <RequestsView wishlist={wishlist} comingSoon={comingSoon} error={requestsError} />
+          <RequestsView
+            wishlist={wishlist}
+            comingSoon={comingSoon}
+            error={requestsError}
+            onRequested={loadRequests}
+          />
         ) : view === "storage" ? (
           <StorageView storage={storage} error={storageError} />
         ) : (

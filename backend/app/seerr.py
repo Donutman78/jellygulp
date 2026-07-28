@@ -29,6 +29,16 @@ class SeerrClient:
             response.raise_for_status()
             return response.json()
 
+    async def _post_json(self, path: str, body: dict):
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{self.base_url}{path}",
+                headers=self.headers,
+                json=body,
+            )
+            response.raise_for_status()
+            return response.json()
+
     async def _requests(self, filter_name: str, take: int = 50) -> list[dict]:
         result = await self._get(
             "/api/v1/request",
@@ -86,6 +96,37 @@ class SeerrClient:
 
     async def enrich(self, requests: list[dict]) -> list[dict]:
         return await self._enrich(requests)
+
+    async def search(self, query: str) -> list[dict]:
+        result = await self._get("/api/v1/search", params={"query": query, "page": 1})
+        results = result.get("results", [])
+
+        return [
+            {
+                "tmdb_id": r.get("id"),
+                "media_type": r.get("mediaType"),
+                "title": r.get("title") or r.get("name") or "Unknown title",
+                "year": (r.get("releaseDate") or r.get("firstAirDate") or "")[:4] or None,
+                "poster_url": f"{TMDB_IMAGE_BASE}{r['posterPath']}" if r.get("posterPath") else None,
+                "overview": r.get("overview"),
+                "already_added": (r.get("mediaInfo") or {}).get("status", 1) > 1,
+            }
+            for r in results
+            if r.get("mediaType") in ("movie", "tv")
+        ]
+
+    async def request_movie(self, tmdb_id: int) -> None:
+        await self._post_json("/api/v1/request", {"mediaType": "movie", "mediaId": tmdb_id})
+
+    async def request_tv(self, tmdb_id: int) -> None:
+        details = await self._get(f"/api/v1/tv/{tmdb_id}")
+        seasons = [
+            s["seasonNumber"] for s in details.get("seasons", []) if s.get("seasonNumber", 0) > 0
+        ]
+        await self._post_json(
+            "/api/v1/request",
+            {"mediaType": "tv", "mediaId": tmdb_id, "seasons": seasons},
+        )
 
     async def wishlist(self) -> list[dict]:
         requests = await self._requests("pending")

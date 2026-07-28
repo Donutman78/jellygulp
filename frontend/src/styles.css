@@ -571,6 +571,34 @@ main {
   color: var(--violet);
 }
 
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cyan-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.icon-btn:hover {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: rgba(77, 243, 255, 0.08);
+}
+
+.icon-btn.danger {
+  color: var(--red);
+  border-color: var(--red);
+  background: rgba(255, 92, 92, 0.1);
+}
+
 .diag {
   margin-top: 18px;
   display: grid;

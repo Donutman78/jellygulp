@@ -144,6 +144,32 @@ async def image_proxy(
     )
 
 
+@app.post("/api/sessions/{session_id}/pause")
+async def pause_session(session_id: str):
+    try:
+        await client.pause_session(session_id)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Jellyfin request failed: {exc}") from exc
+    return {"ok": True}
+
+
+@app.post("/api/sessions/{session_id}/stop")
+async def stop_session(session_id: str):
+    try:
+        await client.stop_session(session_id)
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"Jellyfin request failed: {exc}") from exc
+    return {"ok": True}
+
+
+@app.get("/api/storage")
+async def storage():
+    try:
+        return await client.storage_breakdown()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Jellyfin request failed: {exc}") from exc
+
+
 @app.get("/api/dashboard")
 async def dashboard():
     try:

@@ -9,6 +9,7 @@ import {
   Pause,
   Play,
   Radio,
+  Square,
   Tv,
   Volume2,
 } from "lucide-react";
@@ -21,6 +22,7 @@ import {
   PieChart,
   ResponsiveContainer,
   Tooltip,
+  Treemap,
   XAxis,
   YAxis,
 } from "recharts";
@@ -107,6 +109,15 @@ type SeerrItem = {
   poster_url: string | null;
   requested_by: string | null;
   requested_at: string | null;
+};
+
+type StorageRow = { name: string; bytes: number };
+
+type StorageBreakdown = {
+  movies: StorageRow[];
+  shows: StorageRow[];
+  movies_bytes: number;
+  shows_bytes: number;
 };
 
 type RecentItem = {
@@ -288,7 +299,16 @@ function StatTile({
   );
 }
 
-function SessionCard({ session }: { session: Session }) {
+function SessionCard({
+  session,
+  onPause,
+  onStop,
+}: {
+  session: Session;
+  onPause: (sessionId: string) => void;
+  onStop: (sessionId: string) => void;
+}) {
+  const [confirmStop, setConfirmStop] = useState(false);
   const subtitle = session.series_name
     ? `${session.series_name}${session.season_name ? ` · ${session.season_name}` : ""}${
         session.episode_number ? ` · Episode ${session.episode_number}` : ""
@@ -316,6 +336,31 @@ function SessionCard({ session }: { session: Session }) {
             <span className={`pill${transcoding ? " amber" : ""}`}>{formatPlayMethod(session.play_method)}</span>
             {session.resolution && <span className="pill violet">{session.resolution}</span>}
             {session.is_hdr && <span className="pill violet">{session.video_range || "HDR"}</span>}
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="Pause playback"
+              onClick={() => onPause(session.session_id)}
+            >
+              <Pause size={13} />
+            </button>
+            <button
+              type="button"
+              className={`icon-btn${confirmStop ? " danger" : ""}`}
+              aria-label={confirmStop ? "Confirm stop playback" : "Stop playback"}
+              onClick={() => {
+                if (confirmStop) {
+                  onStop(session.session_id);
+                  setConfirmStop(false);
+                } else {
+                  setConfirmStop(true);
+                  window.setTimeout(() => setConfirmStop(false), 3000);
+                }
+              }}
+            >
+              <Square size={13} />
+              {confirmStop ? "Confirm?" : "Stop"}
+            </button>
           </div>
         </div>
 
@@ -481,6 +526,106 @@ function RequestCard({ item }: { item: SeerrItem }) {
       {item.requested_by && <p className="recent-sub">by {item.requested_by}</p>}
       {item.requested_at && <p className="recent-sub">{formatRelativeTime(item.requested_at)}</p>}
     </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(2)} TB`;
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(0)} MB`;
+  return `${bytes} B`;
+}
+
+function TreemapTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const node = payload[0]?.payload;
+  if (!node?.name) return null;
+
+  return (
+    <div className="panel" style={{ padding: "6px 10px", fontSize: 11 }}>
+      <p style={{ margin: 0, color: "#4df3ff" }}>{node.name}</p>
+      <p style={{ margin: 0, color: "var(--cyan-dim)" }}>{formatBytes(node.size ?? 0)}</p>
+    </div>
+  );
+}
+
+function StorageTreemapCell({ x, y, width, height, color }: any) {
+  if (width < 0 || height < 0) return null;
+
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        style={{ fill: color, fillOpacity: 0.28, stroke: "#040c11", strokeWidth: 1 }}
+      />
+    </g>
+  );
+}
+
+function StorageTreemap({ rows, color }: { rows: StorageRow[]; color: string }) {
+  if (rows.length === 0) {
+    return <p className="empty-note">Nothing indexed yet.</p>;
+  }
+
+  const data = rows.map((r) => ({ name: r.name, size: r.bytes }));
+
+  return (
+    <div className="chart-wrap">
+      <ResponsiveContainer width="100%" height="100%">
+        <Treemap
+          data={data}
+          dataKey="size"
+          nameKey="name"
+          stroke="#040c11"
+          content={<StorageTreemapCell color={color} />}
+        >
+          <Tooltip content={<TreemapTooltip />} />
+        </Treemap>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function StorageView({ storage, error }: { storage: StorageBreakdown | null; error: string | null }) {
+  if (!storage) {
+    return (
+      <div className="panel">
+        <p className="empty-note">
+          {error ? `Storage unavailable: ${error}. Redeploy the backend to enable this view.` : "Loading storage…"}
+        </p>
+      </div>
+    );
+  }
+
+  const total = storage.movies_bytes + storage.shows_bytes;
+
+  return (
+    <>
+      <div className="stats">
+        <StatTile label="Total library size" value={formatBytes(total)} />
+        <StatTile label="Movies" value={formatBytes(storage.movies_bytes)} sub={`${storage.movies.length} titles`} />
+        <StatTile label="Shows" value={formatBytes(storage.shows_bytes)} sub={`${storage.shows.length} series`} />
+      </div>
+
+      <div className="panel" style={{ marginBottom: 18 }}>
+        <p className="eyebrow">Movie files, sized by disk usage</p>
+        <h3 style={{ margin: "2px 0 10px", fontSize: 14, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          Movie library
+        </h3>
+        <StorageTreemap rows={storage.movies} color="#4df3ff" />
+      </div>
+
+      <div className="panel">
+        <p className="eyebrow">TV series, sized by total episode disk usage</p>
+        <h3 style={{ margin: "2px 0 10px", fontSize: 14, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          TV library
+        </h3>
+        <StorageTreemap rows={storage.shows} color="#b98bff" />
+      </div>
+    </>
   );
 }
 
@@ -843,7 +988,9 @@ export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [history, setHistory] = useState<HistoryEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"live" | "analytics" | "requests">("live");
+  const [view, setView] = useState<"live" | "analytics" | "requests" | "storage">("live");
+  const [storage, setStorage] = useState<StorageBreakdown | null>(null);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const [portal, setPortal] = useState<"left" | "right" | null>(null);
 
   function openRequests(direction: "left" | "right") {
@@ -887,6 +1034,24 @@ export default function App() {
     }
   }
 
+  async function pauseSession(sessionId: string) {
+    try {
+      await fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/pause`, { method: "POST" });
+      load();
+    } catch {
+      // next poll will resync regardless
+    }
+  }
+
+  async function stopSession(sessionId: string) {
+    try {
+      await fetch(`${API_BASE}/api/sessions/${encodeURIComponent(sessionId)}/stop`, { method: "POST" });
+      load();
+    } catch {
+      // next poll will resync regardless
+    }
+  }
+
   useEffect(() => {
     load();
     const timer = window.setInterval(load, 10_000);
@@ -916,6 +1081,35 @@ export default function App() {
 
     loadAnalytics();
     const timer = window.setInterval(loadAnalytics, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [view]);
+
+  useEffect(() => {
+    if (view !== "storage") return;
+
+    let cancelled = false;
+    async function loadStorage() {
+      try {
+        const res = await fetch(`${API_BASE}/api/storage`);
+        if (cancelled) return;
+        if (res.ok) {
+          setStorage(await res.json());
+          setStorageError(null);
+        } else {
+          setStorageError(`Storage request returned ${res.status}`);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setStorageError(err instanceof Error ? err.message : "Unknown error");
+        }
+      }
+    }
+
+    loadStorage();
+    const timer = window.setInterval(loadStorage, 60_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -1059,6 +1253,13 @@ export default function App() {
             >
               Requests
             </button>
+            <button
+              type="button"
+              className={`tab-btn${view === "storage" ? " active" : ""}`}
+              onClick={() => setView("storage")}
+            >
+              Storage
+            </button>
           </div>
 
           <div className="status">
@@ -1104,6 +1305,8 @@ export default function App() {
           <AnalyticsView analytics={analytics} error={analyticsError} />
         ) : view === "requests" ? (
           <RequestsView wishlist={wishlist} comingSoon={comingSoon} error={requestsError} />
+        ) : view === "storage" ? (
+          <StorageView storage={storage} error={storageError} />
         ) : (
         <div className="grid">
           <div className="panel gauge-wrap">
@@ -1160,7 +1363,14 @@ export default function App() {
 
               <div className="sessions">
                 {sessions.length ? (
-                  sessions.map((session) => <SessionCard key={session.session_id} session={session} />)
+                  sessions.map((session) => (
+                    <SessionCard
+                      key={session.session_id}
+                      session={session}
+                      onPause={pauseSession}
+                      onStop={stopSession}
+                    />
+                  ))
                 ) : (
                   <div className="empty-state">
                     <Radio size={28} />
